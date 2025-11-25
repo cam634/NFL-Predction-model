@@ -1,4 +1,5 @@
 # R: install packages (run once)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
 install.packages(c("dplyr","lubridate","readr"))
 # install nflreadr from CRAN or github
 install.packages("nflreadr") # CRAN currently provides nflreadr
