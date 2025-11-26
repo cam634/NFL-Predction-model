@@ -66,3 +66,6 @@ jobs:
           file_pattern: "nfl_upcoming_predictions.html"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          repository: ${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
