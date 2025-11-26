@@ -24,8 +24,6 @@ jobs:
           commit_message: "Test committing empty file"
           branch: main
           file_pattern: "test_empty_file.txt"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
           commit_options: "--allow-empty"  # ensures commit even if file is unchanged
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
