@@ -4,7 +4,12 @@ import numpy as np
 import requests
 from tensorflow.keras.models import load_model
 import joblib
+import os
 
+# Get Odds API key from environment variable
+API_KEY = os.environ.get("ODDS_API_KEY")
+if not API_KEY:
+    raise ValueError("Please set the ODDS_API_KEY environment variable!")
 # --------------------------
 # 1️⃣ Load historical data & model
 # --------------------------
@@ -53,7 +58,6 @@ team_map = {
 # --------------------------
 # 3️⃣ Fetch upcoming NFL games from Odds API
 # --------------------------
-API_KEY = "API_KEY"
 SPORT_KEY = "americanfootball_nfl"
 
 def fetch_upcoming_games():
