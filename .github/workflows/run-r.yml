@@ -58,11 +58,11 @@ jobs:
           python3 run_pipeline.py
 
       # 8️⃣ Commit the HTML output
-- name: Commit and push HTML
-  uses: stefanzweifel/git-auto-commit-action@v4
-  with:
-    commit_message: "Update NFL predictions HTML"
-    branch: main
-    file_pattern: "nfl_upcoming_predictions.html"
-    commit_user_name: "github-actions[bot]"
-    commit_user_email: "github-actions[bot]@users.noreply.github.com"
+      - name: Commit and push HTML
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update NFL predictions HTML"
+          branch: main
+          file_pattern: "nfl_upcoming_predictions.html"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
