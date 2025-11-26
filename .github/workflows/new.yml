@@ -1,0 +1,31 @@
+name: Test Commit Empty File
+
+on:
+  workflow_dispatch:  # allows manual triggering
+
+jobs:
+  test-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Create an empty file
+      - name: Create empty test file
+        run: |
+          echo "" > test_empty_file.txt
+
+      # Step 3: Commit and push
+      - name: Commit and push empty file
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Test committing empty file"
+          branch: main
+          file_pattern: "test_empty_file.txt"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_options: "--allow-empty"  # ensures commit even if file is unchanged
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
