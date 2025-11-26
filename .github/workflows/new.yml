@@ -9,8 +9,9 @@ jobs:
 
     steps:
       # Step 1: Checkout repo
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
 
       # Step 2: Create an empty file
       - name: Create empty test file
