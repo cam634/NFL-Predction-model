@@ -1,0 +1,9 @@
+# Virtual environment directories
+venv/
+.venv/
+
+# CSV files
+*.csv
+*.h5
+# .save files
+*.save

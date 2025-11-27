@@ -106,27 +106,54 @@ if week_df.empty:
 # --------------------------
 # 4️⃣ Feature function
 # --------------------------
-def get_features(row, game_df, N=5):
+def get_features(row, game_df, N=3):
     home, away = row['home_team_abbr'], row['away_team_abbr']
+    def last_mean(team, df, col_home, col_away, n=N):
+        rows = df[(df['home_team'] == team) | (df['away_team'] == team)].sort_values('game_date').tail(n)
+        if rows.empty:
+            return 0
+        vals = np.where(rows['home_team'] == team, rows[col_home], rows[col_away])
+        return np.nanmean(vals)
 
-    home_games = game_df[(game_df['home_team']==home) | (game_df['away_team']==home)].sort_values('game_date').tail(N)
-    away_games = game_df[(game_df['home_team']==away) | (game_df['away_team']==away)].sort_values('game_date').tail(N)
+    def last_value(team, df, col_home, col_away):
+        rows = df[(df['home_team'] == team) | (df['away_team'] == team)].sort_values('game_date')
+        if rows.empty:
+            return None
+        last = rows.iloc[-1]
+        return last[col_home] if last['home_team'] == team else last[col_away]
 
-    home_epa = home_games['home_rolling_epa'].mean() if not home_games.empty else 0
-    away_epa = away_games['away_rolling_epa'].mean() if not away_games.empty else 0
-    home_success = home_games['home_rolling_success'].mean() if not home_games.empty else 0
-    away_success = away_games['away_rolling_success'].mean() if not away_games.empty else 0
-    home_turnover = home_games['home_rolling_turnovers'].mean() if not home_games.empty else 0
-    away_turnover = away_games['away_rolling_turnovers'].mean() if not away_games.empty else 0
-    home_elo = home_games['home_elo_pre'].iloc[-1] if not home_games.empty else 1500
-    away_elo = away_games['away_elo_pre'].iloc[-1] if not away_games.empty else 1500
+    # basic rolling diffs (as before)
+    home_epa = last_mean(home, game_df, 'home_rolling_epa', 'away_rolling_epa')
+    away_epa = last_mean(away, game_df, 'home_rolling_epa', 'away_rolling_epa')
+    home_success = last_mean(home, game_df, 'home_rolling_success', 'away_rolling_success')
+    away_success = last_mean(away, game_df, 'home_rolling_success', 'away_rolling_success')
+    home_turnover = last_mean(home, game_df, 'home_rolling_turnovers', 'away_rolling_turnovers')
+    away_turnover = last_mean(away, game_df, 'home_rolling_turnovers', 'away_rolling_turnovers')
 
+    # last elo pre-game
+    home_elo = last_value(home, game_df, 'home_elo_pre', 'away_elo_pre') or 1500
+    away_elo = last_value(away, game_df, 'home_elo_pre', 'away_elo_pre') or 1500
+
+    # EWMA features (short and medium)
+    home_ewma_3 = last_mean(home, game_df, 'home_ewma_epa_3', 'away_ewma_epa_3')
+    away_ewma_3 = last_mean(away, game_df, 'home_ewma_epa_3', 'away_ewma_epa_3')
+    home_ewma_7 = last_mean(home, game_df, 'home_ewma_epa_7', 'away_ewma_epa_7')
+    away_ewma_7 = last_mean(away, game_df, 'home_ewma_epa_7', 'away_ewma_epa_7')
+
+    # Rest days (most recent value)
+    home_rest = last_value(home, game_df, 'home_days_rest', 'away_days_rest') or 7
+    away_rest = last_value(away, game_df, 'home_days_rest', 'away_days_rest') or 7
+
+    # Construct differences in the same order used for training
     epa_diff = home_epa - away_epa
     success_diff = home_success - away_success
     turnover_diff = away_turnover - home_turnover
     elo_diff = home_elo - away_elo
+    epa_diff_ewm_3 = (home_ewma_3 or 0) - (away_ewma_3 or 0)
+    epa_diff_ewm_7 = (home_ewma_7 or 0) - (away_ewma_7 or 0)
+    rest_diff = (home_rest or 7) - (away_rest or 7)
 
-    return [epa_diff, success_diff, turnover_diff, elo_diff]
+    return [epa_diff, success_diff, turnover_diff, elo_diff, epa_diff_ewm_3, epa_diff_ewm_7, rest_diff]
 
 # --------------------------
 # 5️⃣ Predict probabilities
@@ -141,8 +168,8 @@ week_df['away_win_prob'] = 1 - probs
 # --------------------------
 # 6️⃣ Compute implied probabilities and edge
 # --------------------------
-week_df['home_implied_prob'] = 1 / week_df['home_decimal_odds']
-week_df['away_implied_prob'] = 1 / week_df['away_decimal_odds']
+week_df['home_implied_prob'] = week_df['home_decimal_odds'].apply(lambda x: 1 / x if x and x > 0 else np.nan)
+week_df['away_implied_prob'] = week_df['away_decimal_odds'].apply(lambda x: 1 / x if x and x > 0 else np.nan)
 
 week_df['home_edge'] = week_df['home_win_prob'] - week_df['home_implied_prob']
 week_df['away_edge'] = week_df['away_win_prob'] - week_df['away_implied_prob']

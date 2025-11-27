@@ -95,10 +95,29 @@ team_games = pd.concat([
     )
 ], ignore_index=True).sort_values(['team','game_date'])
 
-N = 5  # last 5 games
+N = 3  # last 5 games
 team_games[['rolling_epa','rolling_success','rolling_turnovers']] = team_games.groupby('team')[
     ['epa_per_play','success_rate','turnovers']
 ].transform(lambda x: x.shift().rolling(N, min_periods=1).mean())
+
+# --------------------------
+# Additional recent-weighted features (EWMA) and rest days
+# --------------------------
+for span in [3, 7]:
+    team_games[f'ewma_epa_{span}'] = team_games.groupby('team')['epa_per_play'].transform(
+        lambda s: s.shift().ewm(span=span, adjust=False).mean()
+    )
+    team_games[f'ewma_success_{span}'] = team_games.groupby('team')['success_rate'].transform(
+        lambda s: s.shift().ewm(span=span, adjust=False).mean()
+    )
+    team_games[f'ewma_turnovers_{span}'] = team_games.groupby('team')['turnovers'].transform(
+        lambda s: s.shift().ewm(span=span, adjust=False).mean()
+    )
+
+# Rest days: days since previous game for each team (shifted so current game isn't included)
+team_games = team_games.sort_values(['team','game_date'])
+team_games['last_game_date'] = team_games.groupby('team')['game_date'].shift(1)
+team_games['days_since_last'] = (team_games['game_date'] - team_games['last_game_date']).dt.days.fillna(7)
 
 # Merge rolling features back
 game_df = game_df.merge(
@@ -112,10 +131,44 @@ game_df = game_df.merge(
     ), on=['game_id','away_team'], how='left'
 )
 
+# Merge EWMA and rest-day features back for home/away
+ewma_cols = ['ewma_epa_3','ewma_epa_7','ewma_success_3','ewma_success_7','ewma_turnovers_3','ewma_turnovers_7','days_since_last']
+game_df = game_df.merge(
+    team_games[['game_id','team'] + ewma_cols].rename(
+        columns={
+            'team':'home_team',
+            'ewma_epa_3':'home_ewma_epa_3', 'ewma_epa_7':'home_ewma_epa_7',
+            'ewma_success_3':'home_ewma_success_3','ewma_success_7':'home_ewma_success_7',
+            'ewma_turnovers_3':'home_ewma_turnovers_3','ewma_turnovers_7':'home_ewma_turnovers_7',
+            'days_since_last':'home_days_rest'
+        }
+    ), on=['game_id','home_team'], how='left'
+)
+game_df = game_df.merge(
+    team_games[['game_id','team'] + ewma_cols].rename(
+        columns={
+            'team':'away_team',
+            'ewma_epa_3':'away_ewma_epa_3', 'ewma_epa_7':'away_ewma_epa_7',
+            'ewma_success_3':'away_ewma_success_3','ewma_success_7':'away_ewma_success_7',
+            'ewma_turnovers_3':'away_ewma_turnovers_3','ewma_turnovers_7':'away_ewma_turnovers_7',
+            'days_since_last':'away_days_rest'
+        }
+    ), on=['game_id','away_team'], how='left'
+)
+
 # Feature differences
 game_df['epa_diff'] = game_df['home_rolling_epa'] - game_df['away_rolling_epa']
 game_df['success_diff'] = game_df['home_rolling_success'] - game_df['away_rolling_success']
 game_df['turnover_diff'] = game_df['away_rolling_turnovers'] - game_df['home_rolling_turnovers']
+
+# EWMA differences (short and medium term)
+game_df['epa_diff_ewm_3'] = game_df['home_ewma_epa_3'].fillna(0) - game_df['away_ewma_epa_3'].fillna(0)
+game_df['epa_diff_ewm_7'] = game_df['home_ewma_epa_7'].fillna(0) - game_df['away_ewma_epa_7'].fillna(0)
+game_df['success_diff_ewm_3'] = game_df['home_ewma_success_3'].fillna(0) - game_df['away_ewma_success_3'].fillna(0)
+game_df['turnover_diff_ewm_3'] = game_df['away_ewma_turnovers_3'].fillna(0) - game_df['home_ewma_turnovers_3'].fillna(0)
+
+# Rest difference (home rest - away rest); positive means home is more rested
+game_df['rest_diff'] = game_df['home_days_rest'].fillna(7) - game_df['away_days_rest'].fillna(7)
 
 # --------------------------
 # STEP 8 — SIMPLE ELO RATINGS
@@ -143,14 +196,26 @@ game_df['elo_diff'] = game_df['home_elo_pre'] - game_df['away_elo_pre']
 # --------------------------
 # STEP 9 — PREPARE FEATURES FOR TF
 # --------------------------
-feature_cols = ['epa_diff','success_diff','turnover_diff','elo_diff']
-X = game_df[feature_cols].fillna(0).values
-y = game_df['home_win'].values
+# Expanded features: include EWMA short/medium-term diffs and rest days
+feature_cols = [
+    'epa_diff', 'success_diff', 'turnover_diff', 'elo_diff',
+    'epa_diff_ewm_3', 'epa_diff_ewm_7', 'rest_diff'
+]
+# Use time-aware split: sort by date then split to avoid leakage
+game_df_sorted = game_df.sort_values('game_date').reset_index(drop=True)
+X_sorted = game_df_sorted[feature_cols].fillna(0).values
+y_sorted = game_df_sorted['home_win'].values
 
+split_idx = int(len(game_df_sorted) * 0.8)
+X_train = X_sorted[:split_idx]
+X_test = X_sorted[split_idx:]
+y_train = y_sorted[:split_idx]
+y_test = y_sorted[split_idx:]
+
+# Fit scaler on training data only to avoid leakage
 scaler = StandardScaler()
-X = scaler.fit_transform(X)
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
 
 # --------------------------
 # STEP 10 — BUILD TENSORFLOW MODEL
