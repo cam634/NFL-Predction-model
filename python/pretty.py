@@ -1,5 +1,6 @@
 # pretty_nfl.py
 import pandas as pd
+from pathlib import Path
 
 # --------------------------
 # Load predictions
@@ -65,6 +66,10 @@ styler = df[['home_team','away_team','home_us_odds','away_us_odds',
 # --------------------------
 # Save to HTML
 # --------------------------
-html_file = "nfl_upcoming_predictions.html"
-styler.to_html(html_file)
+repo_root = Path(__file__).resolve().parents[1]
+site_dir = repo_root / "site"
+site_dir.mkdir(parents=True, exist_ok=True)
+
+html_file = site_dir / "nfl_upcoming_predictions.html"
+styler.to_html(str(html_file))
 print(f"HTML output saved to {html_file}")
